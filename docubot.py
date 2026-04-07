@@ -48,72 +48,50 @@ class DocuBot:
     # Index Construction (Phase 1)
     # -----------------------------------------------------------
 
-    def build_index(self, documents):
-        """
-        TODO (Phase 1):
-        Build a tiny inverted index mapping lowercase words to the documents
-        they appear in.
+    def build_index(self, documents=None):
+        documents = documents if documents is not None else self.load_documents()
+        chunks = []
+        for filename, content in documents:
+            paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+            chunks.extend((filename, paragraph) for paragraph in paragraphs)
+        return chunks
 
-        Example structure:
-        {
-            "token": ["AUTH.md", "API_REFERENCE.md"],
-            "database": ["DATABASE.md"]
-        }
+    def score_document(self, query: str, document) -> float:
+        text = document[1] if isinstance(document, tuple) else document
+        query_words = set(query.lower().split())
+        doc_words = text.lower().split()
+        
+        score = 0
+        for word in query_words:
+            if word in doc_words:
+                score += 1
+        return score
 
-        Keep this simple: split on whitespace, lowercase tokens,
-        ignore punctuation if needed.
-        """
-        index = {}
-        # TODO: implement simple indexing
-        return index
+    def retrieve(self, query: str, top_k: int = 3):
+        scored_docs = []
+        for doc in self.index:
+            score = self.score_document(query, doc)
+            if score > 0:
+                scored_docs.append((score, doc))
 
-    # -----------------------------------------------------------
-    # Scoring and Retrieval (Phase 1)
-    # -----------------------------------------------------------
+        if not scored_docs:
+            return ["I don't know. The documentation does not contain information about this."]
 
-    def score_document(self, query, text):
-        """
-        TODO (Phase 1):
-        Return a simple relevance score for how well the text matches the query.
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        return [doc[1] if isinstance(doc, tuple) else doc for score, doc in scored_docs[:top_k]]
 
-        Suggested baseline:
-        - Convert query into lowercase words
-        - Count how many appear in the text
-        - Return the count as the score
-        """
-        # TODO: implement scoring
-        return 0
+    def retrieve_snippets(self, query: str, top_k: int = 3):
+        scored_docs = []
+        for doc in self.index:
+            score = self.score_document(query, doc)
+            if score > 0:
+                scored_docs.append((score, doc))
 
-    def retrieve(self, query, top_k=3):
-        """
-        TODO (Phase 1):
-        Use the index and scoring function to select top_k relevant document snippets.
+        if not scored_docs:
+            return []
 
-        Return a list of (filename, text) sorted by score descending.
-        """
-        results = []
-        # TODO: implement retrieval logic
-        return results[:top_k]
-
-    # -----------------------------------------------------------
-    # Answering Modes
-    # -----------------------------------------------------------
-
-    def answer_retrieval_only(self, query, top_k=3):
-        """
-        Phase 1 retrieval only mode.
-        Returns raw snippets and filenames with no LLM involved.
-        """
-        snippets = self.retrieve(query, top_k=top_k)
-
-        if not snippets:
-            return "I do not know based on these docs."
-
-        formatted = []
-        for filename, text in snippets:
-            formatted.append(f"[{filename}]\n{text}\n")
-
-        return "\n---\n".join(formatted)
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        return [doc for score, doc in scored_docs[:top_k]]
 
     def answer_rag(self, query, top_k=3):
         """
@@ -126,7 +104,7 @@ class DocuBot:
                 "RAG mode requires an LLM client. Provide a GeminiClient instance."
             )
 
-        snippets = self.retrieve(query, top_k=top_k)
+        snippets = self.retrieve_snippets(query, top_k=top_k)
 
         if not snippets:
             return "I do not know based on these docs."
